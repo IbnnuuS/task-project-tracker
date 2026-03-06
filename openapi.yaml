@@ -1,0 +1,694 @@
+openapi: 3.0.3
+
+info:
+  title: Task & Project Tracker API
+  description: |
+    REST API untuk aplikasi Task & Project Tracker.
+    Dibuat dengan Laravel 12 dan menggunakan Laravel Sanctum untuk autentikasi.
+
+    **Base URL:** `http://localhost:8000/api`
+
+    **Autentikasi:** Semua endpoint kecuali `/login` membutuhkan Bearer Token yang didapat dari endpoint login.
+  version: 1.0.0
+  contact:
+    name: IbnnuuS
+    url: https://github.com/IbnnuuS
+
+servers:
+  - url: http://localhost:8000/api
+    description: Local Development Server
+
+tags:
+  - name: Auth
+    description: Autentikasi pengguna
+  - name: Dashboard
+    description: Data statistik dan ringkasan dashboard
+  - name: Projects
+    description: Manajemen project
+  - name: Tasks
+    description: Manajemen task / tugas
+
+# ────────────────────────────────────────────────────────────
+# Security Scheme
+# ────────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  # ──────────────────────────────────────────────────────────
+  # Reusable Schemas
+  # ──────────────────────────────────────────────────────────
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Admin TaskTracker
+        email:
+          type: string
+          format: email
+          example: admin@track.er
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: To Do
+        color:
+          type: string
+          example: "#6c757d"
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: Design wireframes
+        description:
+          type: string
+          nullable: true
+          example: Create low-fidelity wireframes for the homepage
+        category_id:
+          type: integer
+          example: 2
+        project_id:
+          type: integer
+          example: 1
+        due_date:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-03-10"
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        category:
+          $ref: "#/components/schemas/Category"
+        project:
+          $ref: "#/components/schemas/ProjectBasic"
+
+    ProjectBasic:
+      type: object
+      description: Project tanpa relasi tasks (untuk list view)
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Website Redesign
+        description:
+          type: string
+          nullable: true
+          example: Redesign the company website
+        status:
+          type: string
+          enum: [active, archived]
+          example: active
+        due_date:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-04-01"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProjectDetail:
+      allOf:
+        - $ref: "#/components/schemas/ProjectBasic"
+        - type: object
+          properties:
+            tasks:
+              type: array
+              items:
+                $ref: "#/components/schemas/Task"
+
+    DashboardStats:
+      type: object
+      properties:
+        total_active_projects:
+          type: integer
+          example: 3
+        total_pending_tasks:
+          type: integer
+          example: 12
+        near_due_tasks:
+          type: array
+          description: Tasks yang jatuh tempo dalam 3 hari ke depan
+          items:
+            $ref: "#/components/schemas/Task"
+
+    ValidationError:
+      type: object
+      properties:
+        message:
+          type: string
+          example: The name field is required.
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            name: ["The name field is required."]
+
+    UnauthenticatedError:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Unauthenticated.
+
+    SuccessMessage:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Task deleted successfully.
+
+# ────────────────────────────────────────────────────────────
+# Paths
+# ────────────────────────────────────────────────────────────
+paths:
+  # ── AUTH ──────────────────────────────────────────────────
+
+  /login:
+    post:
+      tags: [Auth]
+      summary: Login pengguna
+      description: Melakukan autentikasi dan mengembalikan Sanctum API token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: admin@track.er
+                password:
+                  type: string
+                  format: password
+                  example: password123
+      responses:
+        "200":
+          description: Login berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: 1|abc123def456...
+                  user:
+                    $ref: "#/components/schemas/User"
+        "422":
+          description: Kredensial tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+
+  /logout:
+    post:
+      tags: [Auth]
+      summary: Logout pengguna
+      description: Menghapus token autentikasi saat ini (invalidate token).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Logout berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully.
+        "401":
+          description: Tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedError"
+
+  # ── DASHBOARD ─────────────────────────────────────────────
+
+  /dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Ambil statistik dashboard
+      description: |
+        Mengembalikan ringkasan statistik:
+        - Jumlah project yang aktif
+        - Jumlah task yang belum selesai (bukan kategori "Done")
+        - Daftar task yang mendekati due date (dalam 3 hari ke depan)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Data statistik dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+        "401":
+          description: Tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedError"
+
+  # ── PROJECTS ──────────────────────────────────────────────
+
+  /projects:
+    get:
+      tags: [Projects]
+      summary: Ambil daftar semua project
+      description: Mengembalikan semua project milik pengguna, diurutkan dari yang terbaru. Mendukung pencarian berdasarkan nama.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Filter project berdasarkan nama
+          example: "website"
+      responses:
+        "200":
+          description: Daftar project berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectBasic"
+        "401":
+          description: Tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedError"
+
+    post:
+      tags: [Projects]
+      summary: Buat project baru
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+                  example: Website Redesign
+                description:
+                  type: string
+                  nullable: true
+                  example: Redesign the company website
+                due_date:
+                  type: string
+                  format: date
+                  nullable: true
+                  example: "2026-04-01"
+                status:
+                  type: string
+                  enum: [active, archived]
+                  example: active
+      responses:
+        "201":
+          description: Project berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectBasic"
+        "422":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedError"
+
+  /projects/{id}:
+    get:
+      tags: [Projects]
+      summary: Ambil detail satu project
+      description: Mengembalikan detail project beserta seluruh task-nya (beserta kategori masing-masing task).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: ID project
+          example: 1
+      responses:
+        "200":
+          description: Detail project berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+        "404":
+          description: Project tidak ditemukan
+        "401":
+          description: Tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedError"
+
+    put:
+      tags: [Projects]
+      summary: Perbarui project
+      description: Memperbarui data project. Semua field bersifat opsional (partial update).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: ID project
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+                  example: Website Redesign v2
+                description:
+                  type: string
+                  nullable: true
+                  example: Updated description
+                due_date:
+                  type: string
+                  format: date
+                  nullable: true
+                  example: "2026-05-01"
+                status:
+                  type: string
+                  enum: [active, archived]
+                  example: archived
+      responses:
+        "200":
+          description: Project berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectBasic"
+        "422":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "404":
+          description: Project tidak ditemukan
+        "401":
+          description: Tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedError"
+
+  # ── TASKS ─────────────────────────────────────────────────
+
+  /tasks:
+    get:
+      tags: [Tasks]
+      summary: Ambil semua task (global view)
+      description: Mengembalikan seluruh task dari semua project, diurutkan berdasarkan due date. Mendukung pencarian berdasarkan judul task.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Filter task berdasarkan judul
+          example: "design"
+      responses:
+        "200":
+          description: Daftar semua task
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+        "401":
+          description: Tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedError"
+
+  /projects/{id}/tasks:
+    get:
+      tags: [Tasks]
+      summary: Ambil task berdasarkan project
+      description: Mengembalikan semua task yang tergabung dalam project tertentu, beserta informasi kategorinya.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: ID project
+          example: 1
+      responses:
+        "200":
+          description: Daftar task dalam project
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+        "404":
+          description: Project tidak ditemukan
+        "401":
+          description: Tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedError"
+
+    post:
+      tags: [Tasks]
+      summary: Buat task baru dalam sebuah project
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: ID project
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, category_id]
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                  example: Design wireframes
+                description:
+                  type: string
+                  nullable: true
+                  example: Create lo-fi wireframes for homepage
+                category_id:
+                  type: integer
+                  description: ID kategori (kolom Kanban). Lihat GET /categories untuk daftar lengkap.
+                  example: 1
+                due_date:
+                  type: string
+                  format: date
+                  nullable: true
+                  example: "2026-03-10"
+      responses:
+        "201":
+          description: Task berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "422":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "404":
+          description: Project tidak ditemukan
+        "401":
+          description: Tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedError"
+
+  /tasks/{id}:
+    put:
+      tags: [Tasks]
+      summary: Perbarui task
+      description: |
+        Memperbarui data task. Semua field bersifat opsional.
+        Digunakan juga untuk **memindahkan task antar kolom Kanban** (dengan mengubah `category_id`)
+        atau **memindahkan task antar project** (dengan mengubah `project_id`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: ID task
+          example: 5
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                  example: Design wireframes (revised)
+                description:
+                  type: string
+                  nullable: true
+                  example: Include mobile screens
+                category_id:
+                  type: integer
+                  description: Pindahkan task ke kolom Kanban lain
+                  example: 2
+                due_date:
+                  type: string
+                  format: date
+                  nullable: true
+                  example: "2026-03-15"
+                project_id:
+                  type: integer
+                  description: Pindahkan task ke project lain
+                  example: 2
+      responses:
+        "200":
+          description: Task berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "422":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "404":
+          description: Task tidak ditemukan
+        "401":
+          description: Tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedError"
+
+    delete:
+      tags: [Tasks]
+      summary: Hapus task (soft delete)
+      description: Menghapus task secara soft delete. Task tidak langsung dihapus dari database, tetapi `deleted_at` akan diisi dengan timestamp saat ini.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: ID task
+          example: 5
+      responses:
+        "200":
+          description: Task berhasil dihapus
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessMessage"
+        "404":
+          description: Task tidak ditemukan
+        "401":
+          description: Tidak terautentikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedError"

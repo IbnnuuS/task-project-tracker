@@ -1,0 +1,18 @@
+/*
+ * Custom global overrides (NiceAdmin handles most styles via /public/assets/css/style.css)
+ * Keep this file lean to avoid conflicts.
+ */
+
+/* Ensure the Vue app fills the screen properly */
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+#app {
+  /* Reset Vite defaults that conflict with NiceAdmin layout */
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
