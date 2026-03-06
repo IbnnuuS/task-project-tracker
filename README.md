@@ -3,7 +3,6 @@
 A full-stack **Task & Project Management** application built with a Laravel REST API backend and a Vue 3 SPA frontend, packaged as a monorepo.
 
 <img width="1920" height="917" alt="image" src="https://github.com/user-attachments/assets/7182e5b0-052c-4a17-a58d-5df2078ef0ea" />
-
 ---
 
 ## ✨ Features
